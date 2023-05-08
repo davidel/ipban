@@ -83,12 +83,12 @@ def resolve_args(args, ver, defver=0):
 
     rargs.append(rarg)
 
-  return rargs
+  return tuple(rargs)
 
 
 def iptables(*args, **kwargs):
-  subprocess.check_call(['iptables'] + resolve_args(args, 4), **kwargs)
-  subprocess.check_call(['ip6tables'] + resolve_args(args, 6), **kwargs)
+  subprocess.check_call(('iptables',) + resolve_args(args, 4), **kwargs)
+  subprocess.check_call(('ip6tables',) + resolve_args(args, 6), **kwargs)
 
 
 def ipset_create(name, ip_kind='hash:ip', net_kind='hash:net'):
@@ -113,10 +113,10 @@ def ipset_del(name, ip):
 
 def create_ruleset(rule_name):
   ut.log(ut.DEBUG, f'Creating IPTABLES "{rule_name}" ruleset')
-  iptables(('-N', rule_name))
+  iptables('-N', rule_name)
 
-  iptables(('-I', 'INPUT', '-j', rule_name))
-  iptables(('-I', 'FORWARD', '-j', rule_name))
+  iptables('-I', 'INPUT', '-j', rule_name)
+  iptables('-I', 'FORWARD', '-j', rule_name)
 
 
 def block_set(rule_name, name):
@@ -124,8 +124,8 @@ def block_set(rule_name, name):
   ipmset = {4: ipset_ip_name(name, 4), 6: ipset_ip_name(name, 6)}
   netmset = {4: ipset_net_name(name, 4), 6: ipset_net_name(name, 6)}
 
-  iptables(('-I', rule_name, '-m', 'set', '--match-set', ipmset, 'src', '-j', 'DROP'))
-  iptables(('-I', rule_name, '-m', 'set', '--match-set', netmset, 'src', '-j', 'DROP'))
+  iptables('-I', rule_name, '-m', 'set', '--match-set', ipmset, 'src', '-j', 'DROP')
+  iptables('-I', rule_name, '-m', 'set', '--match-set', netmset, 'src', '-j', 'DROP')
 
 
 def init_firewall(cfg):
