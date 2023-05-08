@@ -83,12 +83,12 @@ def resolve_args(args, ver, defver=0):
 
     rargs.append(rarg)
 
-  return tuple(rargs)
+  return rargs
 
 
 def iptables(*args, **kwargs):
-  subprocess.check_call(('iptables',) + resolve_args(args, 4), **kwargs)
-  subprocess.check_call(('ip6tables',) + resolve_args(args, 6), **kwargs)
+  subprocess.check_call(['iptables'] + resolve_args(args, 4), **kwargs)
+  subprocess.check_call(['ip6tables'] + resolve_args(args, 6), **kwargs)
 
 
 def ipset_create(name, ip_kind='hash:ip', net_kind='hash:net'):
