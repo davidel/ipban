@@ -41,11 +41,11 @@ def save_config(path, cfg):
 
 
 def save_ipset(name):
-  return subprocess.check_output(['ipset', 'save', name])
+  return subprocess.check_output(('ipset', 'save', name))
 
 
 def ipset_restore(data):
-  subprocess.run(['ipset', 'restore'], input=data, check=True, capture_output=True)
+  subprocess.run(('ipset', 'restore'), input=data, check=True, capture_output=True)
 
 
 def ipset_ip_name(name, family):
@@ -93,22 +93,22 @@ def iptables(*args, **kwargs):
 
 def ipset_create(name, ip_kind='hash:ip', net_kind='hash:net'):
   ut.log(ut.DEBUG, f'Creating "{name}" IPSET')
-  subprocess.check_call(['ipset', '-exist', 'create', ipset_ip_name(name, 4), ip_kind, 'family', 'inet'])
-  subprocess.check_call(['ipset', '-exist', 'create', ipset_net_name(name, 4), net_kind, 'family', 'inet'])
-  subprocess.check_call(['ipset', '-exist', 'create', ipset_ip_name(name, 6), ip_kind, 'family', 'inet6'])
-  subprocess.check_call(['ipset', '-exist', 'create', ipset_net_name(name, 6), net_kind, 'family', 'inet6'])
+  subprocess.check_call(('ipset', '-exist', 'create', ipset_ip_name(name, 4), ip_kind, 'family', 'inet'))
+  subprocess.check_call(('ipset', '-exist', 'create', ipset_net_name(name, 4), net_kind, 'family', 'inet'))
+  subprocess.check_call(('ipset', '-exist', 'create', ipset_ip_name(name, 6), ip_kind, 'family', 'inet6'))
+  subprocess.check_call(('ipset', '-exist', 'create', ipset_net_name(name, 6), net_kind, 'family', 'inet6'))
 
 
 def ipset_add(name, ip):
   ut.log(ut.DEBUG, f'Adding "{ip}" to the "{name}" IPSET')
   sname = ipset_name_from_ip(name, ip)
-  subprocess.check_call(['ipset', '-exist', 'add', sname, ip])
+  subprocess.check_call(('ipset', '-exist', 'add', sname, ip))
 
 
 def ipset_del(name, ip):
   ut.log(ut.DEBUG, f'Removing "{ip}" from the "{name}" IPSET')
   sname = ipset_name_from_ip(name, ip)
-  subprocess.check_call(['ipset', '-exist', 'del', sname, ip])
+  subprocess.check_call(('ipset', '-exist', 'del', sname, ip))
 
 
 def create_ruleset(rule_name):

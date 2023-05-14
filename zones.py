@@ -132,10 +132,7 @@ class ZonesArena(object):
 
   def lookup(self, ip, strict=True):
     if isinstance(ip, str):
-      if '/' in ip:
-        ip = ipaddress.ip_network(ip, strict=strict)
-      else:
-        ip = ipaddress.ip_address(ip)
+      ip = ut.get_ip_net(ip, strict=strict)
 
     if ut.is_network(ip):
       ipa = ip.network_address
