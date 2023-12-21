@@ -23,7 +23,7 @@ _IPSET_NAME = 'ipban'
 def load_config(path):
   ut.log(ut.DEBUG, f'Loading configuration from {path}')
   with open(path, mode='r') as f:
-    return yaml.load(f)
+    return yaml.load(f, Loader=yaml.FullLoader)
 
 
 def save_config(path, cfg):
