@@ -320,7 +320,7 @@ def net_lookup(cfg, args):
     zi = za.lookup(ipn)
     if zi is not None:
       country = zi.get('country', '??')
-      ut.log(ut.INFO, f'{ipn}\t{zi['net']}\t{country}')
+      ut.log(ut.INFO, f'{ipn}\t{zi["net"]}\t{country}')
     else:
       ut.log(ut.ERROR, f'{ipn}\tNot Found!')
 
