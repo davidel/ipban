@@ -213,16 +213,10 @@ def add_ip_list(cfg, ips, args):
 
 
 def add_ip(cfg, args):
-  if not args.ip:
-    raise RuntimeError(f'You must specify at least one "--ip IP" argument')
-
   add_ip_list(cfg, args.ip, args)
 
 
 def del_ip(cfg, args):
-  if not args.ip:
-    raise RuntimeError(f'You must specify at least one "--ip IP" argument')
-
   ipcs = [ut.get_canonical_ip(ip) for ip in args.ip]
 
   sip = set(cfg['blocked_ips'])
@@ -318,6 +312,19 @@ def zones_purge(cfg, args):
     save_config(args.config_file, cfg)
 
 
+def net_lookup(cfg, args):
+  za = zn.ZonesArena().load_zones()
+
+  for ip in args.ip:
+    ipn = ut.get_ip_net(ip)
+    zi = za.lookup(ipn)
+    if zi is not None:
+      country = zi.get('country', '??')
+      ut.log(ut.INFO, f'{ipn}\t{zi['net']}\t{country}')
+    else:
+      ut.log(ut.ERROR, f'{ipn}\tNot Found!')
+
+
 def run(args):
   cfg = load_config(args.config_file)
   if args.cmd == 'init':
@@ -332,6 +339,8 @@ def run(args):
     purge(cfg, args)
   elif args.cmd == 'zones_purge':
     zones_purge(cfg, args)
+  elif args.cmd == 'net_lookup':
+    net_lookup(cfg, args)
   else:
     raise RuntimeError(f'Unknown command: {args.cmd}')
 
@@ -351,10 +360,10 @@ if __name__ == '__main__':
   parser.add_argument('--config_file', type=str, required=True,
                       help='The path to the configuration file')
   parser.add_argument('--cmd', type=str, required=True,
-                      choices={'init', 'addip', 'delip', 'madd', 'purge', 'zones_purge'},
+                      choices={'init', 'addip', 'delip', 'madd', 'purge', 'zones_purge', 'net_lookup'},
                       help='The command to issue')
-  parser.add_argument('--ip', action='append',
-                      help='The IP to add')
+  parser.add_argument('--ip', nargs='+',
+                      help='The IP(s) to add')
   parser.add_argument('--file', type=str,
                       help='The file to be used as input/output (depending on the command)')
   parser.add_argument('--min_count', type=int, default=10,
