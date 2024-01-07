@@ -285,17 +285,19 @@ def zones_purge(cfg, args):
   dropped = set()
   match_nets = set()
   for net, ips in matches.items():
+    zi = za.lookup(net)
+    country = zi.get('country', '??')
     if len(ips) >= args.min_count:
-      zi = za.lookup(net)
-      country = zi.get('country', '??')
-      ut.log(ut.DEBUG, f'Dropping IPs in {zi["net"]} country={country}')
+      ut.log(ut.INFO, f'Dropping IPs in {zi["net"]} country={country}')
 
       for ip in ips:
-        ut.log(ut.DEBUG, f'  {ip}')
+        ut.log(ut.INFO, f'  {ip}')
         sip.discard(ip)
         dropped.add(ip)
 
       match_nets.add(net)
+    else:
+      ut.log(ut.DEBUG, f'Net {zi["net"]} country={country} has {len(ips)} IPs')
 
   if dropped:
     for ip in dropped:
