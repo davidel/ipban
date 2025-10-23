@@ -25,6 +25,13 @@ def default_entry():
   return dict(mtime=int(time.time()))
 
 
+def touch_entry(ipdata):
+  mtime = ipdata.get('mtime', 0)
+  ipdata['mtime'] = max(mtime, int(time.time()))
+
+  return ipdata
+
+
 def load_config(path):
   ut.log(ut.DEBUG, f'Loading configuration from {path}')
   with open(path, mode='r') as f:
@@ -145,29 +152,38 @@ def init_firewall(cfg):
   block_set(_IPBAN_RULES, _IPSET_NAME)
 
 
-def get_sorted_ips(ips):
+def create_ip_arena(ips):
 
   def sortip(ip):
-    ipn = ut.get_ip_net(ip)
+    ipn = ut.get_ip_net(ip) if isinstance(ip, str) else ip
 
     return ut.get_ipn_ip(ipn).packed
 
-  skeys = sorted(ips.keys(), key=sortip)
+  sip = dict()
+  for ip in sorted(ips.keys(), key=sortip):
+    ipk = ip if isinstance(ip, str) else ut.ipstr(ip)
+    sip[ipk] = ips[ip]
 
-  return {ip: ips[ip] for ip in skeys}
+  return sip
 
 
-def ipset_purge_list(ips):
-  ipns, ipnets = [], []
-  for ip in ips:
+def parse_nets(sip):
+  pips, pnets = dict(), dict()
+  for ip, ipdata in sip.items():
     ipn = ut.get_ip_net(ip)
     if ut.is_network(ipn):
-      ipnets.append(ipn)
+      pnets[ipn] = ipdata
     else:
-      ipns.append(ipn)
+      pips[ipn] = ipdata
+
+  return pips, pnets
+
+
+def ipset_purge_list(sip):
+  pips, pnets = parse_nets(sip)
 
   dropped = []
-  cnets = list(ipnets)
+  cnets = list(pnets.keys())
   for i in range(0, len(cnets)):
     inn = cnets[i]
     if inn is None:
@@ -186,20 +202,20 @@ def ipset_purge_list(ips):
         dropped.append(inn)
         break
 
-  ipnets = [ipn for ipn in cnets if ipn is not None]
-  cips = []
-  for ipn in ipns:
+  purged_nets = {ipn: pnets[ipn] for ipn in cnets if ipn is not None}
+  purged_ips = dict()
+  for ipn, ipdata in pips.items():
     dropit = False
-    for ipnet in ipnets:
-      if ipn.version == ipnet.version and ipn in ipnet:
+    for net in purged_nets.keys():
+      if ipn.version == net.version and ipn in net:
         dropit = True
         dropped.append(ipn)
         break
 
     if not dropit:
-      cips.append(ipn)
+      purged_ips[ipn] = ipdata
 
-  return ipnets, cips, dropped
+  return purged_nets, purged_ips, dropped
 
 
 def add_ip_list(cfg, ips, args):
@@ -207,19 +223,45 @@ def add_ip_list(cfg, ips, args):
 
   ut.log(ut.DEBUG, f'Adding IP: {ipcs}')
 
-  sip, added = cfg['blocked_ips'], []
+  pips, pnets = parse_nets(cfg['blocked_ips'])
+  added = []
   for ip in ipcs:
-    xip = sip.get(ip)
-    if xip is None:
-      sip[ip] = default_entry()
-      added.append(ip)
+    ipn = ut.get_ip_net(ip)
+
+    if ut.is_network(ipn):
+      net_processed = 0
+      for nip, ipdata in list(pnets.items()):
+        if nip.version == ipn.version:
+          if ipn.subnet_of(nip):
+            touch_entry(ipdata)
+            net_processed += 1
+
+      if net_processed == 0:
+        pnets[ipn] = default_entry()
     else:
-      xip['mtime'] = int(time.time())
+      net_present = 0
+      for nip, ipdata in pnets.items():
+        if ipn.version == nip.version and ipn in nip:
+          touch_entry(ipdata)
+          net_present += 1
+
+      if net_present > 0:
+        pips.pop(ipn, None)
+      else:
+        ipdata = pips.get(ipn, None)
+        if ipdata is None:
+          pips[ipn] = default_entry()
+          added.append(ipn)
+        else:
+          touch_entry(ipdata)
 
   for ip in added:
-    ipset_add(_IPSET_NAME, ip)
+    ipset_add(_IPSET_NAME, ut.ipstr(ip))
 
-  cfg['blocked_ips'] = get_sorted_ips(sip)
+  psip = pips.copy()
+  psip.update(pnets)
+
+  cfg['blocked_ips'] = create_ip_arena(psip)
   save_config(args.config_file, cfg)
 
 
@@ -239,7 +281,7 @@ def del_ip(cfg, args):
     for ip in dropped:
       ipset_del(_IPSET_NAME, ip)
 
-    cfg['blocked_ips'] = get_sorted_ips(sip)
+    cfg['blocked_ips'] = create_ip_arena(sip)
     save_config(args.config_file, cfg)
 
 
@@ -268,18 +310,16 @@ def madd_ip(cfg, args):
 
 def purge(cfg, args):
   sip = cfg['blocked_ips']
-  ipnets, cips, dropped = ipset_purge_list(list(sip.keys()))
+  purged_nets, purged_ips, dropped = ipset_purge_list(sip)
 
   if dropped:
     for ipn in dropped:
       ipset_del(_IPSET_NAME, ut.ipstr(ipn))
 
-    psip = dict()
-    for ipn in cips + ipnets:
-      ip = ut.ipstr(ipn)
-      psip[ip] = sip[ip]
+    purged_sip = purged_ips.copy()
+    purged_sip.update(purged_nets)
 
-    cfg['blocked_ips'] = get_sorted_ips(psip)
+    cfg['blocked_ips'] = create_ip_arena(purged_sip)
     save_config(args.config_file, cfg)
 
 
@@ -326,7 +366,7 @@ def zones_purge(cfg, args):
         ipset_add(_IPSET_NAME, nets)
         sip[nets] = default_entry()
 
-    cfg['blocked_ips'] = get_sorted_ips(sip)
+    cfg['blocked_ips'] = create_ip_arena(sip)
     save_config(args.config_file, cfg)
 
 
