@@ -28,15 +28,7 @@ def default_entry():
 def load_config(path):
   ut.log(ut.DEBUG, f'Loading configuration from {path}')
   with open(path, mode='r') as f:
-    cfg = yaml.load(f, Loader=yaml.FullLoader)
-
-    # HACK: Temporary conversion!
-    ips = cfg['blocked_ips']
-    if not isinstance(ips, dict):
-      nips = {ip: default_entry() for ip in ips}
-      cfg['blocked_ips'] = nips
-
-    return cfg
+    return yaml.load(f, Loader=yaml.FullLoader)
 
 
 def save_config(path, cfg):
