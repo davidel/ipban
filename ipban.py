@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import traceback
 import yaml
 
@@ -20,10 +21,22 @@ _IPBAN_RULES = 'IPBAN'
 _IPSET_NAME = 'ipban'
 
 
+def default_entry():
+  return dict(mtime=int(time.time()))
+
+
 def load_config(path):
   ut.log(ut.DEBUG, f'Loading configuration from {path}')
   with open(path, mode='r') as f:
-    return yaml.load(f, Loader=yaml.FullLoader)
+    cfg = yaml.load(f, Loader=yaml.FullLoader)
+
+    # HACK: Temporary conversion!
+    ips = cfg['blocked_ips']
+    if not isinstance(ips, dict):
+      nips = {ip: default_entry() for ip in ips}
+      cfg['blocked_ips'] = nips
+
+    return cfg
 
 
 def save_config(path, cfg):
@@ -132,7 +145,7 @@ def init_firewall(cfg):
   ut.log(ut.DEBUG, f'Initializing IPSET firewall')
   ipset_create(_IPSET_NAME)
 
-  restore_data = ipset_generate_ips_restore(_IPSET_NAME, cfg['blocked_ips'] or [])
+  restore_data = ipset_generate_ips_restore(_IPSET_NAME, list(cfg['blocked_ips'].keys))
   if restore_data:
     ipset_restore(restore_data.encode())
 
@@ -147,7 +160,9 @@ def get_sorted_ips(ips):
 
     return ut.get_ipn_ip(ipn).packed
 
-  return sorted(ips, key=sortip)
+  skeys = sorted(ips.keys(), key=sortip)
+
+  return {ip: ips[ip] for ip in skeys}
 
 
 def ipset_purge_list(ips):
@@ -200,16 +215,20 @@ def add_ip_list(cfg, ips, args):
 
   ut.log(ut.DEBUG, f'Adding IP: {ipcs}')
 
-  sip = set(cfg['blocked_ips'])
-  num_ips = len(sip)
+  sip, added = cfg['blocked_ips'], []
   for ip in ipcs:
-    sip.add(ip)
-  if len(sip) > num_ips:
-    for ip in ipcs:
-      ipset_add(_IPSET_NAME, ip)
+    xip = sip.get(ip)
+    if xip is None:
+      sip[ip] = default_entry()
+      added.append(ip)
+    else:
+      xip['mtime'] = int(time.time())
 
-    cfg['blocked_ips'] = get_sorted_ips(sip)
-    save_config(args.config_file, cfg)
+  for ip in added:
+    ipset_add(_IPSET_NAME, ip)
+
+  cfg['blocked_ips'] = get_sorted_ips(sip)
+  save_config(args.config_file, cfg)
 
 
 def add_ip(cfg, args):
@@ -219,12 +238,13 @@ def add_ip(cfg, args):
 def del_ip(cfg, args):
   ipcs = [ut.get_canonical_ip(ip) for ip in args.ip]
 
-  sip = set(cfg['blocked_ips'])
-  num_ips = len(sip)
+  sip, dropped = cfg['blocked_ips'], []
   for ip in ipcs:
-    sip.discard(ip)
-  if len(sip) < num_ips:
-    for ip in ipcs:
+    if sip.pop(ip, None) is not None:
+      dropped.append(ip)
+
+  if dropped:
+    for ip in dropped:
       ipset_del(_IPSET_NAME, ip)
 
     cfg['blocked_ips'] = get_sorted_ips(sip)
@@ -255,15 +275,19 @@ def madd_ip(cfg, args):
 
 
 def purge(cfg, args):
-  ipnets, cips, dropped = ipset_purge_list(cfg['blocked_ips'])
+  sip = cfg['blocked_ips']
+  ipnets, cips, dropped = ipset_purge_list(list(sip.keys()))
 
   if dropped:
     for ipn in dropped:
       ipset_del(_IPSET_NAME, ut.ipstr(ipn))
 
-    sip = [ut.ipstr(ipn) for ipn in cips + ipnets]
+    psip = dict()
+    for ipn in cips + ipnets:
+      ip = ut.ipstr(ipn)
+      psip[ip] = sip[ip]
 
-    cfg['blocked_ips'] = get_sorted_ips(sip)
+    cfg['blocked_ips'] = get_sorted_ips(psip)
     save_config(args.config_file, cfg)
 
 
@@ -271,9 +295,9 @@ def zones_purge(cfg, args):
   za = zn.ZonesArena().load_zones()
   cza = zn.ZonesArena()
 
-  sip = set(cfg['blocked_ips'])
+  sip = cfg['blocked_ips']
   matches = collections.defaultdict(list)
-  for ip in sip:
+  for ip in sip.keys():
     ipn = ut.get_ip_net(ip)
     if ut.is_network(ipn):
       cza.add_zone(ipn)
@@ -292,7 +316,7 @@ def zones_purge(cfg, args):
 
       for ip in ips:
         ut.log(ut.INFO, f'  {ip}')
-        sip.discard(ip)
+        sip.pop(ip, None)
         dropped.add(ip)
 
       match_nets.add(net)
@@ -308,7 +332,7 @@ def zones_purge(cfg, args):
       if zi is None:
         nets = ut.ipstr(net)
         ipset_add(_IPSET_NAME, nets)
-        sip.add(nets)
+        sip[nets] = default_entry()
 
     cfg['blocked_ips'] = get_sorted_ips(sip)
     save_config(args.config_file, cfg)
