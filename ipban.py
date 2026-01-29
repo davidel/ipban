@@ -144,7 +144,7 @@ def init_firewall(cfg):
   ut.log(ut.DEBUG, f'Initializing IPSET firewall')
   ipset_create(_IPSET_NAME)
 
-  restore_data = ipset_generate_ips_restore(_IPSET_NAME, list(cfg['blocked_ips'].keys))
+  restore_data = ipset_generate_ips_restore(_IPSET_NAME, list(cfg['blocked_ips'].keys()))
   if restore_data:
     ipset_restore(restore_data.encode())
 
